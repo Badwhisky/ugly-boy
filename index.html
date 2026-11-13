@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Vine: a system sketchpad</title>
+<style>
+:root{--bg:#eef3f0;--grid:#dbe5df;--ink:#10231a;--soft:#3f5247;--card:#ffffff;--line:#1f5c3a;--bd:#a9bdb1;--btn:#10231a;--btnt:#ffffff;--focus:#b34700;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1a14;--grid:#17271e;--ink:#e8f1ec;--soft:#b4c6bb;--card:#16251c;--line:#6fcf97;--bd:#3c5646;--btn:#e8f1ec;--btnt:#0e1a14;--focus:#ffb347;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1a14;--grid:#17271e;--ink:#e8f1ec;--soft:#b4c6bb;--card:#16251c;--line:#6fcf97;--bd:#3c5646;--btn:#e8f1ec;--btnt:#0e1a14;--focus:#ffb347;color-scheme:dark}
+*,*:before,*:after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background-color:var(--bg);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:28px 28px;color:var(--ink);font:18px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif;padding:16px 14px 80px}
+main{max-width:720px;margin:0 auto}
+h1{font:700 34px/1.1 Georgia,"Times New Roman",serif;margin:8px 0 8px;letter-spacing:-.5px}
+p{margin:0 0 12px;color:var(--soft)}
+.intro{max-width:34em}
+button,select,textarea{font:inherit;font-size:16px;color:var(--ink)}
+button{min-height:44px;padding:8px 14px;margin:0 8px 8px 0;border:2px solid var(--btn);border-radius:22px;background:var(--btn);color:var(--btnt);font-weight:600;cursor:pointer;-webkit-appearance:none}
+button.alt{background:transparent;color:var(--ink)}
+button.warn{border-color:#b3261e;background:#b3261e;color:#fff}
+:focus{outline:3px solid var(--focus);outline-offset:2px}
+.tools{margin:14px 0 18px}
+.status{min-height:24px;font-weight:600;color:var(--line)}
+.out{display:none;width:100%;min-height:200px;margin:0 0 16px;padding:12px;border:2px solid var(--bd);border-radius:10px;background:var(--card)}
+.out.on{display:block}
+/* the vine */
+ol.line{list-style:none;margin:0;padding:0;position:relative}
+ol.line:before{content:"";position:absolute;left:10px;top:0;bottom:0;width:4px;border-radius:2px;background:var(--line)}
+ol.line>li{position:relative;padding:0 0 16px 34px}
+ol.line>li:before{content:"";position:absolute;left:3px;top:20px;width:18px;height:18px;border-radius:50%;background:var(--bg);border:4px solid var(--line)}
+.branch{position:relative;margin-top:4px}
+.branch:before{content:"";position:absolute;left:-24px;top:-22px;width:32px;height:44px;border-left:4px solid var(--line);border-bottom:4px solid var(--line);border-bottom-left-radius:26px}
+.branch>ol.line:before{top:22px}
+.card{background:var(--card);border:2px solid var(--bd);border-left-width:8px;border-radius:10px;padding:10px 12px 4px}
+.s0{border-left-color:#8a5300}.s1{border-left-color:#1f7a4a}.s2{border-left-color:#1a5fb4}.s3{border-left-color:#b3261e}.s4{border-left-color:#6b3fa0}.s5{border-left-color:#007a78}
+label{display:block;font-size:15px;font-weight:700;margin-bottom:4px}
+select,textarea{width:100%;border:2px solid var(--bd);border-radius:8px;background:var(--bg);padding:10px;margin-bottom:10px}
+textarea{min-height:84px;resize:vertical;line-height:1.4}
+.empty{font-weight:600}
+@media (max-width:420px){h1{font-size:30px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Vine</h1>
+<p class="intro">Grow a system the way you would on paper. Jot, sketch, design, test, write notes, rebuild. Every step can send out a branch for another possibility, and everything stays editable. It saves on this device.</p>
+<div class="tools">
+<button type="button" id="exp" class="alt">Show as text</button>
+<button type="button" id="clr" class="alt">Start over</button>
+<button type="button" id="thm" class="alt">Dark or light</button>
+</div>
+<p class="status" id="st" role="status" aria-live="polite"></p>
+<textarea id="out" class="out" readonly aria-label="Your vine as plain text. Select all to copy."></textarea>
+<noscript><p>This page needs JavaScript to build and edit your vine.</p></noscript>
+<div id="vine"></div>
+</main>
+<script>
+(function(){
+var STAGES=[["Jot","Jot an idea. Messy is fine."],["Rough idea","Sketch the rough shape of it."],["Design","Describe the design, from the start to the outcome you want."],["Test","What did you test, and what happened?"],["Notes","Write down what you learned."],["Rebuild","What will you change and rebuild?"]];
+var KEY="vine-v1",uid=0,focusNode=null,root;
+var vineEl=document.getElementById("vine"),st=document.getElementById("st"),out=document.getElementById("out");
+function mk(stage){return{stage:stage||0,text:"",branches:[]};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(root));}catch(e){}}
+function load(){try{var d=localStorage.getItem(KEY);if(d){var p=JSON.parse(d);if(p&&p.length)return p;}}catch(e){}return[mk(0)];}
+function say(t){st.textContent=t;}
+function h(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+function next(n){return Math.min((n?n.stage:-1)+1,5);}
+function line(arr,parent){
+var ol=h("ol","line");
+arr.forEach(function(n,i){
+var li=h("li"),card=h("div","card s"+n.stage),id="f"+(uid++);
+var lab=h("label",null,"Stage");lab.htmlFor=id;
+var sel=h("select");sel.id=id;
+STAGES.forEach(function(s,k){var o=h("option",null,s[0]);o.value=k;if(k===n.stage)o.selected=true;sel.appendChild(o);});
+var ta=h("textarea");ta.value=n.text;ta.placeholder=STAGES[n.stage][1];ta.setAttribute("aria-label","Your notes for this step");
+sel.onchange=function(){n.stage=+sel.value;card.className="card s"+n.stage;ta.placeholder=STAGES[n.stage][1];save();say("Stage set to "+STAGES[n.stage][0]+".");};
+ta.oninput=function(){n.text=ta.value;save();};
+var add=h("button",null,"Next step");add.type="button";
+add.onclick=function(){var m=mk(next(n));arr.splice(i+1,0,m);focusNode=m;save();render();say("Step added below.");};
+var br=h("button","alt","Branch");br.type="button";
+br.onclick=function(){var m=mk(next(n));n.branches.push([m]);focusNode=m;save();render();say("New branch started.");};
+var del=h("button","alt","Delete"),armed=0;del.type="button";
+del.onclick=function(){
+if(!armed){armed=1;del.className="warn";del.textContent="Tap again to delete";say("Tap Delete again to remove this step and its branches.");setTimeout(function(){armed=0;del.className="alt";del.textContent="Delete";},3500);return;}
+arr.splice(i,1);
+if(!arr.length){if(parent){parent.branches.splice(parent.branches.indexOf(arr),1);}else{arr.push(mk(0));}}
+save();render();say("Step deleted.");};
+card.appendChild(lab);card.appendChild(sel);card.appendChild(ta);card.appendChild(add);card.appendChild(br);card.appendChild(del);
+li.appendChild(card);
+n.branches.forEach(function(b){var w=h("div","branch");w.appendChild(line(b,n));li.appendChild(w);});
+if(n===focusNode){setTimeout(function(){ta.focus();},30);focusNode=null;}
+ol.appendChild(li);
+});
+return ol;}
+function render(){vineEl.innerHTML="";vineEl.appendChild(line(root,null));}
+function text(arr,d){var s="",pad="",k;for(k=0;k<d;k++)pad+="    ";
+arr.forEach(function(n){s+=pad+"["+STAGES[n.stage][0]+"] "+(n.text||"(empty)").replace(/\n/g,"\n"+pad+"    ")+"\n";n.branches.forEach(function(b){s+=pad+"  Branch:\n"+text(b,d+1);});});return s;}
+document.getElementById("exp").onclick=function(){
+var on=out.className.indexOf(" on")>-1;
+if(on){out.className="out";this.textContent="Show as text";say("Text hidden.");}
+else{out.value=text(root,0);out.className="out on";this.textContent="Hide text";say("Text ready. Tap inside it, select all, then copy.");}};
+var clr=document.getElementById("clr"),carm=0;
+clr.onclick=function(){
+if(!carm){carm=1;clr.className="warn";clr.textContent="Tap again to erase all";say("This erases your whole vine. Tap again to confirm.");setTimeout(function(){carm=0;clr.className="alt";clr.textContent="Start over";},3500);return;}
+root=[mk(0)];save();render();carm=0;clr.className="alt";clr.textContent="Start over";say("Fresh vine started.");};
+document.getElementById("thm").onclick=function(){
+var d=document.documentElement,dark=d.getAttribute("data-theme")==="dark"||(d.getAttribute("data-theme")!=="light"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+d.setAttribute("data-theme",dark?"light":"dark");};
+root=load();render();
+})();
+</script>
+</body>
+</html>
